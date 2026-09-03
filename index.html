@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Curve · Analisi 2</title>
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@13.2.2/lib/browser/math.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">∿</div>
+      <div>
+        <div class="eyebrow">Laboratorio visivo</div>
+        <h1>Curve · Analisi 2</h1>
+      </div>
+    </div>
+    <p>Esplora formule, curve e superfici con un grafico interattivo.</p>
+  </header>
+
+  <main>
+    <aside class="panel">
+      <div class="section-title">1 · Formula</div>
+      <label for="type">Tipo di oggetto</label>
+      <select id="type">
+        <option value="auto">Riconosci automaticamente</option>
+        <option value="param2">Curva parametrica 2D</option>
+        <option value="param3">Curva parametrica 3D</option>
+        <option value="complex">Curva complessa p(t)</option>
+        <option value="polar">Curva polare r(t)</option>
+        <option value="implicit2">Curva implicita F(x,y)=0</option>
+        <option value="implicit3">Superficie implicita F(x,y,z)=0</option>
+        <option value="surface">Superficie z=f(x,y)</option>
+      </select>
+
+      <label for="expr">Formula</label>
+      <textarea id="expr" spellcheck="false">p(t) = 2/3 e^(i t) + 1/3 e^(-2 i t)</textarea>
+
+      <div class="section-title">2 · Dominio</div>
+      <div class="ranges">
+        <div><label>t · da / a</label><input id="tmin" value="0"><input id="tmax" value="2*pi"></div>
+        <div><label>x · da / a</label><input id="xmin" value="-2"><input id="xmax" value="2"></div>
+        <div><label>y · da / a</label><input id="ymin" value="-2"><input id="ymax" value="2"></div>
+        <div><label>z · da / a</label><input id="zmin" value="-2"><input id="zmax" value="2"></div>
+      </div>
+
+      <label class="check"><input id="tangent" type="checkbox"> Mostra tangente e punti notevoli (se disponibili)</label>
+      <button id="draw">Disegna</button>
+      <div id="error" class="error"></div>
+
+      <div class="section-title">Oppure scegli un esempio</div>
+      <div class="examples">
+        <button class="example" data-kind="complex" data-formula="p(t) = 2/3 e^(i t) + 1/3 e^(-2 i t)" data-t="0,2*pi">Deltoide<br><small>complessa</small></button>
+        <button class="example" data-kind="param2" data-formula="x(t)=cos(3t); y(t)=sin(2t)" data-t="0,2*pi">Lissajous<br><small>parametrica</small></button>
+        <button class="example" data-kind="param3" data-formula="x(t)=cos(t); y(t)=sin(t); z(t)=t/4" data-t="0,8*pi">Elica<br><small>nello spazio</small></button>
+        <button class="example" data-kind="polar" data-formula="r(t)=cos(3t)" data-t="0,2*pi">Rosa<br><small>polare</small></button>
+        <button class="example" data-kind="implicit2" data-formula="x^2 + y^2 - 1" data-t="0,1">Cerchio<br><small>implicito</small></button>
+        <button class="example" data-kind="surface" data-formula="sin(x)*cos(y)" data-t="0,1">Onda<br><small>superficie</small></button>
+      </div>
+
+      <p id="formula" class="formula"></p>
+      <p class="hint">Sintassi: <code>sin, cos, exp, sqrt, pi, ^</code>. Se la lettura automatica non è corretta, seleziona il tipo.</p>
+    </aside>
+
+    <section id="plotWrap">
+      <div class="plot-head"><strong>Grafico</strong><span>Trascina per esplorare · scorri per zoomare</span></div>
+      <span id="badge" class="badge">Pronto</span>
+      <div id="plot"></div>
+    </section>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
