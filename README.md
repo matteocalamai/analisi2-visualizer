@@ -8,6 +8,8 @@ Un piccolo visualizzatore interattivo per esplorare formule, curve e superfici d
 - Curve complesse `p(t)` e curve polari `r(t)`
 - Curve implicite `F(x,y)=0`
 - Superfici esplicite `z=f(x,y)` e implicite `F(x,y,z)=0`
+- Animazione puntuale del triedro di Frenet per curve parametriche 3D
+- Piano osculatore opzionale, aggiornato durante l’animazione
 - Riconoscimento automatico del tipo di formula
 - Grafici interattivi, modalità chiara/scura e layout responsive
 
@@ -18,6 +20,12 @@ Deltoide complesso, curva di Lissajous, elica 3D, rosa polare, cerchio implicito
 ## Utilizzo
 
 Scarica o clona il repository e apri `index.html` in un browser moderno. Non sono necessari build step, server locale o installazioni.
+
+### Triedro di Frenet e piano osculatore
+
+Per una curva parametrica 3D, ad esempio `x(t)=cos(t); y(t)=sin(t); z(t)=t/4`, seleziona **Anima il punto con il triedro di Frenet** e premi **Disegna**. Il grafico mostra i vettori tangente `T`, normale principale `N` e binormale `B`; i comandi di riproduzione, pausa e cursore permettono di esplorare singoli valori di `t`.
+
+Attivando **Mostra il piano osculatore nel punto animato**, viene visualizzato il piano generato da `T` e `N`. La funzionalità richiede una curva regolare con curvatura non nulla nel punto considerato.
 
 ## Dipendenze
 

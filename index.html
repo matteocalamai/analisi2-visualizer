@@ -47,6 +47,11 @@
       </div>
 
       <label class="check"><input id="tangent" type="checkbox"> Mostra tangente e punti notevoli (se disponibili)</label>
+
+      <div class="section-title">3 · Triedro di Frenet</div>
+      <label class="check"><input id="frenet" type="checkbox"> Anima il punto con il triedro di Frenet <span class="only-3d">(curve 3D)</span></label>
+      <label class="check"><input id="osculating" type="checkbox" disabled> Mostra il piano osculatore nel punto animato</label>
+      <p class="control-hint">T = tangente · N = normale principale · B = binormale. Il piano osculatore è generato da T e N.</p>
       <button id="draw">Disegna</button>
       <div id="error" class="error"></div>
 

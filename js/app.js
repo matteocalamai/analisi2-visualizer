@@ -72,6 +72,102 @@ function plot(data, layout) {
   Plotly.newPlot('plot', data, layout, { responsive: true });
 }
 
+function vectorLength(vector) {
+  return Math.hypot(...vector);
+}
+
+function normalizeVector(vector) {
+  const length = vectorLength(vector);
+  return length > 1e-9 ? vector.map((value) => value / length) : null;
+}
+
+function crossProduct([ax, ay, az], [bx, by, bz]) {
+  return [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+}
+
+function scaleVector(vector, scalar) {
+  return vector.map((value) => value * scalar);
+}
+
+function addVectors(...vectors) {
+  return vectors[0].map((_, index) => vectors.reduce((total, vector) => total + vector[index], 0));
+}
+
+function getFrenetFrame(xFormula, yFormula, zFormula, t, step, vectorScale, planeScale) {
+  const pointAt = (parameter) => [
+    Number(evaluateExpression(xFormula, { t: parameter })),
+    Number(evaluateExpression(yFormula, { t: parameter })),
+    Number(evaluateExpression(zFormula, { t: parameter })),
+  ];
+  const center = pointAt(t);
+  const before = pointAt(t - step);
+  const after = pointAt(t + step);
+  const velocity = after.map((value, index) => (value - before[index]) / (2 * step));
+  const acceleration = after.map((value, index) => (value - (2 * center[index]) + before[index]) / (step * step));
+  const tangent = normalizeVector(velocity);
+  const binormal = tangent && normalizeVector(crossProduct(velocity, acceleration));
+  const normal = binormal && normalizeVector(crossProduct(binormal, tangent));
+  if (!tangent || !normal || !binormal || !center.every(Number.isFinite)) return null;
+
+  const endpoint = (direction) => addVectors(center, scaleVector(direction, vectorScale));
+  const planeCorner = (tangentSign, normalSign) => addVectors(center, scaleVector(tangent, tangentSign * planeScale), scaleVector(normal, normalSign * planeScale));
+  const corners = [planeCorner(-1, -1), planeCorner(1, -1), planeCorner(1, 1), planeCorner(-1, 1)];
+  return { center, tangent, normal, binormal, endpoint, corners };
+}
+
+function createFrenetAnimation(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues, showPlane) {
+  const span = Math.max(
+    Math.max(...xValues) - Math.min(...xValues),
+    Math.max(...yValues) - Math.min(...yValues),
+    Math.max(...zValues) - Math.min(...zValues),
+    1,
+  );
+  const step = Math.max((parameterValues.at(-1) - parameterValues[0]) / 12000, 1e-5);
+  const selectedIndices = Array.from({ length: 100 }, (_, index) => Math.round(2 + (index * (parameterValues.length - 5)) / 99));
+  const frames = selectedIndices.map((index) => {
+    const frenet = getFrenetFrame(xFormula, yFormula, zFormula, parameterValues[index], step, span * .16, span * .27);
+    if (!frenet) return null;
+    const { center, tangent, normal, binormal, endpoint, corners } = frenet;
+    const data = [
+      { x: [center[0]], y: [center[1]], z: [center[2]] },
+      { x: [center[0], endpoint(tangent)[0]], y: [center[1], endpoint(tangent)[1]], z: [center[2], endpoint(tangent)[2]] },
+      { x: [center[0], endpoint(normal)[0]], y: [center[1], endpoint(normal)[1]], z: [center[2], endpoint(normal)[2]] },
+      { x: [center[0], endpoint(binormal)[0]], y: [center[1], endpoint(binormal)[1]], z: [center[2], endpoint(binormal)[2]] },
+    ];
+    if (showPlane) data.push({ x: corners.map((corner) => corner[0]), y: corners.map((corner) => corner[1]), z: corners.map((corner) => corner[2]) });
+    return { name: `t=${parameterValues[index].toFixed(3)}`, data, traces: data.map((_, traceIndex) => traceIndex + 1) };
+  }).filter(Boolean);
+  return frames;
+}
+
+function drawFrenetCurve(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues) {
+  const showPlane = getElement('osculating').checked;
+  const frames = createFrenetAnimation(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues, showPlane);
+  if (!frames.length) throw Error('Non è possibile calcolare il triedro: scegli una curva regolare con curvatura non nulla.');
+  const start = frames[0].data;
+  const data = [
+    { type: 'scatter3d', mode: 'lines', x: xValues, y: yValues, z: zValues, line: { width: 6, color: '#4f46e5' }, name: 'curva' },
+    { type: 'scatter3d', mode: 'markers', x: start[0].x, y: start[0].y, z: start[0].z, marker: { size: 5, color: '#171c2e' }, name: 'punto' },
+    { type: 'scatter3d', mode: 'lines', x: start[1].x, y: start[1].y, z: start[1].z, line: { width: 8, color: '#df3d43' }, name: 'T · tangente' },
+    { type: 'scatter3d', mode: 'lines', x: start[2].x, y: start[2].y, z: start[2].z, line: { width: 8, color: '#16845d' }, name: 'N · normale' },
+    { type: 'scatter3d', mode: 'lines', x: start[3].x, y: start[3].y, z: start[3].z, line: { width: 8, color: '#3b70c8' }, name: 'B · binormale' },
+  ];
+  if (showPlane) data.push({ type: 'mesh3d', x: start[4].x, y: start[4].y, z: start[4].z, i: [0, 0], j: [1, 2], k: [2, 3], color: '#f5a623', opacity: .34, name: 'piano osculatore', showscale: false });
+  const layout = get3DLayout();
+  layout.showlegend = true;
+  layout.legend = { x: .02, y: .98, bgcolor: 'rgba(255,255,255,.76)' };
+  layout.updatemenus = [{
+    type: 'buttons', direction: 'left', x: .02, y: .02, xanchor: 'left', yanchor: 'bottom', pad: { r: 8, t: 8 },
+    buttons: [
+      { label: '▶ Riproduci', method: 'animate', args: [null, { fromcurrent: true, frame: { duration: 55, redraw: true }, transition: { duration: 0 } }] },
+      { label: '❚❚ Pausa', method: 'animate', args: [[null], { mode: 'immediate', frame: { duration: 0, redraw: false }, transition: { duration: 0 } }] },
+    ],
+  }];
+  layout.sliders = [{ active: 0, x: .02, len: .76, y: 0, pad: { b: 2, t: 28 }, currentvalue: { prefix: 'Posizione: ' }, steps: frames.map((frame) => ({ label: frame.name, method: 'animate', args: [[frame.name], { mode: 'immediate', frame: { duration: 0, redraw: true }, transition: { duration: 0 } }] })) }];
+  Plotly.newPlot('plot', data, layout, { responsive: true }).then(() => Plotly.addFrames('plot', frames));
+  getElement('plotWrap').insertAdjacentHTML('beforeend', '<div class="frenet-legend"><span class="t">T tangente</span><span class="n">N normale</span><span class="b">B binormale</span></div>');
+}
+
 function drawParametricCurve(formula, mode, parameterValues) {
   const xFormula = getRightHandSide(formula, 'x(t)');
   const yFormula = getRightHandSide(formula, 'y(t)');
@@ -84,7 +180,9 @@ function drawParametricCurve(formula, mode, parameterValues) {
 
   if (mode === 'param3') {
     if (!zFormula) throw Error('Manca z(t).');
-    plot([{ type: 'scatter3d', mode: 'lines', x: xValues, y: yValues, z: parameterValues.map((t) => evaluateExpression(zFormula, { t })), line: { width: 6, color: '#4f46e5' }, name: 'curva' }], get3DLayout());
+    const zValues = parameterValues.map((t) => evaluateExpression(zFormula, { t }));
+    if (getElement('frenet').checked) drawFrenetCurve(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues);
+    else plot([{ type: 'scatter3d', mode: 'lines', x: xValues, y: yValues, z: zValues, line: { width: 6, color: '#4f46e5' }, name: 'curva' }], get3DLayout());
     return interpretation;
   }
 
@@ -183,6 +281,7 @@ function updateInterpretation(text) {
 
 function draw() {
   try {
+    document.querySelector('.frenet-legend')?.remove();
     const formula = getElement('expr').value;
     const selectedMode = getElement('type').value;
     const mode = selectedMode === 'auto' ? getModeFromFormula(formula) : selectedMode;
@@ -199,7 +298,14 @@ function draw() {
     else interpretation = drawImplicitSurface(formula, domain);
 
     updateInterpretation(interpretation);
-    getElement('badge').textContent = mode.replace('param', 'parametrica ');
+    const is3dCurve = mode === 'param3';
+    getElement('frenet').disabled = !is3dCurve;
+    getElement('osculating').disabled = !is3dCurve || !getElement('frenet').checked;
+    if (!is3dCurve) {
+      getElement('frenet').checked = false;
+      getElement('osculating').checked = false;
+    }
+    getElement('badge').textContent = is3dCurve && getElement('frenet').checked ? 'triedro animato' : mode.replace('param', 'parametrica ');
   } catch (error) {
     getElement('error').textContent = `Controlla la formula: ${error.message}`;
   }
@@ -217,4 +323,8 @@ document.querySelectorAll('.example').forEach((button) => {
 });
 
 getElement('draw').onclick = draw;
+getElement('frenet').onchange = () => {
+  getElement('osculating').disabled = !getElement('frenet').checked;
+  if (!getElement('frenet').checked) getElement('osculating').checked = false;
+};
 draw();
