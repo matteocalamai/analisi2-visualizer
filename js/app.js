@@ -13,6 +13,7 @@ function normalizeExpression(expression) {
   return expression
     .replace(/[−–]/g, '-')
     .replace(/π/g, 'pi')
+    .replace(/θ/g, 'theta')
     .replace(/\be\^\s*\(/g, 'exp(')
     .replace(/\bi\s*?/g, 'i*')
     .replace(/\)\s*\(/g, ')*(')
@@ -26,7 +27,7 @@ function evaluateExpression(expression, scope) {
 function getModeFromFormula(formula) {
   const text = formula.toLowerCase();
   if (/\bp\s*\(t\)|\bi\b|complex/.test(text)) return 'complex';
-  if (/\br\s*\(t\)/.test(text)) return 'polar';
+  if (/\br\s*\([tθ]|theta\)/.test(text)) return 'polar';
   if (/\bz\s*=|f\s*\(x\s*,\s*y\)/.test(text)) return 'surface';
   if (/\bx\s*\(t\).*\by\s*\(t\).*\bz\s*\(t\)/s.test(text)) return 'param3';
   if (/\bx\s*\(t\).*\by\s*\(t\)/s.test(text)) return 'param2';
@@ -93,12 +94,7 @@ function addVectors(...vectors) {
   return vectors[0].map((_, index) => vectors.reduce((total, vector) => total + vector[index], 0));
 }
 
-function getFrenetFrame(xFormula, yFormula, zFormula, t, step, vectorScale, planeScale) {
-  const pointAt = (parameter) => [
-    Number(evaluateExpression(xFormula, { t: parameter })),
-    Number(evaluateExpression(yFormula, { t: parameter })),
-    Number(evaluateExpression(zFormula, { t: parameter })),
-  ];
+function getFrenetFrame(pointAt, t, step, vectorScale, planeScale) {
   const center = pointAt(t);
   const before = pointAt(t - step);
   const after = pointAt(t + step);
@@ -115,7 +111,7 @@ function getFrenetFrame(xFormula, yFormula, zFormula, t, step, vectorScale, plan
   return { center, tangent, normal, binormal, endpoint, corners };
 }
 
-function createFrenetAnimation(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues, showPlane) {
+function createFrenetAnimation(pointAt, xValues, yValues, zValues, parameterValues, showPlane) {
   const span = Math.max(
     Math.max(...xValues) - Math.min(...xValues),
     Math.max(...yValues) - Math.min(...yValues),
@@ -125,7 +121,7 @@ function createFrenetAnimation(xFormula, yFormula, zFormula, xValues, yValues, z
   const step = Math.max((parameterValues.at(-1) - parameterValues[0]) / 12000, 1e-5);
   const selectedIndices = Array.from({ length: 100 }, (_, index) => Math.round(2 + (index * (parameterValues.length - 5)) / 99));
   const frames = selectedIndices.map((index) => {
-    const frenet = getFrenetFrame(xFormula, yFormula, zFormula, parameterValues[index], step, span * .16, span * .27);
+    const frenet = getFrenetFrame(pointAt, parameterValues[index], step, span * .16, span * .27);
     if (!frenet) return null;
     const { center, tangent, normal, binormal, endpoint, corners } = frenet;
     const data = [
@@ -140,9 +136,9 @@ function createFrenetAnimation(xFormula, yFormula, zFormula, xValues, yValues, z
   return frames;
 }
 
-function drawFrenetCurve(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues) {
+function drawFrenetCurve(pointAt, xValues, yValues, zValues, parameterValues) {
   const showPlane = getElement('osculating').checked;
-  const frames = createFrenetAnimation(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues, showPlane);
+  const frames = createFrenetAnimation(pointAt, xValues, yValues, zValues, parameterValues, showPlane);
   if (!frames.length) throw Error('Non è possibile calcolare il triedro: scegli una curva regolare con curvatura non nulla.');
   const start = frames[0].data;
   const data = [
@@ -177,12 +173,22 @@ function drawParametricCurve(formula, mode, parameterValues) {
   const xValues = parameterValues.map((t) => evaluateExpression(xFormula, { t }));
   const yValues = parameterValues.map((t) => evaluateExpression(yFormula, { t }));
   const interpretation = `x(t) = ${xFormula}; y(t) = ${yFormula}`;
+  const pointAt = (t) => [
+    Number(evaluateExpression(xFormula, { t })),
+    Number(evaluateExpression(yFormula, { t })),
+    mode === 'param3' ? Number(evaluateExpression(zFormula, { t })) : 0,
+  ];
 
   if (mode === 'param3') {
     if (!zFormula) throw Error('Manca z(t).');
     const zValues = parameterValues.map((t) => evaluateExpression(zFormula, { t }));
-    if (getElement('frenet').checked) drawFrenetCurve(xFormula, yFormula, zFormula, xValues, yValues, zValues, parameterValues);
+    if (getElement('frenet').checked) drawFrenetCurve(pointAt, xValues, yValues, zValues, parameterValues);
     else plot([{ type: 'scatter3d', mode: 'lines', x: xValues, y: yValues, z: zValues, line: { width: 6, color: '#4f46e5' }, name: 'curva' }], get3DLayout());
+    return interpretation;
+  }
+
+  if (getElement('frenet').checked) {
+    drawFrenetCurve(pointAt, xValues, yValues, parameterValues.map(() => 0), parameterValues);
     return interpretation;
   }
 
@@ -212,6 +218,14 @@ function drawComplexCurve(formula, parameterValues) {
   const values = parameterValues.map((t) => evaluateExpression(complexFormula, { t }));
   const xValues = values.map((value) => math.re(value));
   const yValues = values.map((value) => math.im(value));
+  const pointAt = (t) => {
+    const value = evaluateExpression(complexFormula, { t });
+    return [Number(math.re(value)), Number(math.im(value)), 0];
+  };
+  if (getElement('frenet').checked) {
+    drawFrenetCurve(pointAt, xValues, yValues, parameterValues.map(() => 0), parameterValues);
+    return `Re p(t) = ${complexFormula}; Im p(t) = ${complexFormula}`;
+  }
   plot([
     { type: 'scatter', mode: 'lines', x: xValues, y: yValues, line: { width: 3, color: '#4f46e5' }, name: 'p(t)' },
     { type: 'scatter', mode: 'markers+text', x: [xValues[0]], y: [yValues[0]], text: ['inizio →'], textposition: 'top right', marker: { size: 10, color: '#ef4444' }, name: 'verso' },
@@ -220,8 +234,19 @@ function drawComplexCurve(formula, parameterValues) {
 }
 
 function drawPolarCurve(formula, parameterValues) {
-  const radiusFormula = getRightHandSide(formula, 'r(t)') || formula;
-  const radii = parameterValues.map((t) => evaluateExpression(radiusFormula, { t }));
+  const radiusFormula = getRightHandSide(formula, 'r(t)') || getRightHandSide(formula, 'r(theta)') || getRightHandSide(formula, 'r(θ)') || formula;
+  const scopeFor = (t) => ({ t, theta: t, θ: t });
+  const radii = parameterValues.map((t) => Number(evaluateExpression(radiusFormula, scopeFor(t))));
+  const pointAt = (t) => {
+    const radius = Number(evaluateExpression(radiusFormula, scopeFor(t)));
+    return [radius * Math.cos(t), radius * Math.sin(t), 0];
+  };
+  if (getElement('frenet').checked) {
+    const xValues = parameterValues.map((t, index) => radii[index] * Math.cos(t));
+    const yValues = parameterValues.map((t, index) => radii[index] * Math.sin(t));
+    drawFrenetCurve(pointAt, xValues, yValues, parameterValues.map(() => 0), parameterValues);
+    return `r(t) = ${radiusFormula}; x=r cos(t), y=r sin(t)`;
+  }
   plot([{ type: 'scatterpolar', mode: 'lines', r: radii, theta: parameterValues.map((t) => (t * 180) / Math.PI), line: { width: 3, color: '#4f46e5' } }], { margin: { l: 25, r: 25, b: 25, t: 25 }, polar: { radialaxis: { showgrid: true }, angularaxis: { showgrid: true } }, paper_bgcolor: 'rgba(0,0,0,0)' });
   return `r(t) = ${radiusFormula}; x=r cos(t), y=r sin(t)`;
 }
@@ -279,6 +304,29 @@ function updateInterpretation(text) {
   getElement('formula').innerHTML = `<strong>Interpretazione:</strong> <code>${text.replace(/</g, '&lt;')}</code>`;
 }
 
+function supportsFrenet(mode) {
+  // Le curve implicite non espongono ancora un percorso ordinato affidabile:
+  // il tracciato di livello corrente serve solo al rendering del contorno.
+  return ['param2', 'param3', 'complex', 'polar'].includes(mode);
+}
+
+function updateFrenetControls(mode) {
+  const available = supportsFrenet(mode);
+  const frenet = getElement('frenet');
+  const osculating = getElement('osculating');
+  frenet.disabled = !available;
+  if (!available) {
+    frenet.checked = false;
+    osculating.checked = false;
+  }
+  osculating.disabled = !available || !frenet.checked;
+}
+
+function selectedMode() {
+  const selected = getElement('type').value;
+  return selected === 'auto' ? getModeFromFormula(getElement('expr').value) : selected;
+}
+
 function draw() {
   try {
     document.querySelector('.frenet-legend')?.remove();
@@ -290,6 +338,7 @@ function draw() {
     let interpretation;
 
     getElement('error').textContent = '';
+    updateFrenetControls(mode);
     if (mode === 'param2' || mode === 'param3') interpretation = drawParametricCurve(formula, mode, parameterValues);
     else if (mode === 'complex') interpretation = drawComplexCurve(formula, parameterValues);
     else if (mode === 'polar') interpretation = drawPolarCurve(formula, parameterValues);
@@ -298,15 +347,11 @@ function draw() {
     else interpretation = drawImplicitSurface(formula, domain);
 
     updateInterpretation(interpretation);
-    const is3dCurve = mode === 'param3';
-    getElement('frenet').disabled = !is3dCurve;
-    getElement('osculating').disabled = !is3dCurve || !getElement('frenet').checked;
-    if (!is3dCurve) {
-      getElement('frenet').checked = false;
-      getElement('osculating').checked = false;
-    }
-    getElement('badge').textContent = is3dCurve && getElement('frenet').checked ? 'triedro animato' : mode.replace('param', 'parametrica ');
+    getElement('badge').textContent = supportsFrenet(mode) && getElement('frenet').checked ? 'triedro animato' : mode.replace('param', 'parametrica ');
   } catch (error) {
+    // Non lasciare sul grafico il frame valido della curva precedente quando
+    // la nuova curva non ammette un triedro (punto non regolare o curvatura nulla).
+    Plotly.purge('plot');
     getElement('error').textContent = `Controlla la formula: ${error.message}`;
   }
 }
@@ -326,5 +371,9 @@ getElement('draw').onclick = draw;
 getElement('frenet').onchange = () => {
   getElement('osculating').disabled = !getElement('frenet').checked;
   if (!getElement('frenet').checked) getElement('osculating').checked = false;
+};
+getElement('type').onchange = () => updateFrenetControls(selectedMode());
+getElement('expr').oninput = () => {
+  if (getElement('type').value === 'auto') updateFrenetControls(selectedMode());
 };
 draw();
